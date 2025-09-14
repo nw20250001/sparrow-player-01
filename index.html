@@ -232,16 +232,18 @@
         async function saveTrackToDB(track) { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.put(track); }
         async function loadTracksFromDB() {
             if (!db) return;
-            playlist = [];
-            currentTrackIndex = -1;
+            playlist = []; currentTrackIndex = -1;
             const transaction = db.transaction(['tracks'], 'readonly');
             const store = transaction.objectStore('tracks');
             const allTracksReq = store.getAll();
-            allTracksReq.onsuccess = () => {
-                const tracks = allTracksReq.result.map(track => ({...track, source: URL.createObjectURL(track.file)}));
-                playlist.push(...tracks);
-                renderLists();
-            };
+            return new Promise(resolve => {
+                allTracksReq.onsuccess = () => {
+                    const tracks = allTracksReq.result.map(track => ({...track, source: URL.createObjectURL(track.file)}));
+                    playlist.push(...tracks);
+                    renderLists();
+                    resolve();
+                };
+            });
         }
         async function removeTrackFromDB(persistentId) { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.delete(persistentId); }
         async function clearDB() { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.clear(); }
@@ -305,14 +307,11 @@
                 const gradientLeft = ctx.createLinearGradient(0, 0, dom.visualizer_canvas.width / 2, 0);
                 gradientLeft.addColorStop(0, `hsla(${hue}, 100%, 60%, 0.7)`);
                 gradientLeft.addColorStop(1, `hsla(${hue}, 100%, 60%, 0)`);
-                ctx.fillStyle = gradientLeft;
-                ctx.fillRect(0, i * barHeight, barLength, barHeight);
-                
+                ctx.fillStyle = gradientLeft; ctx.fillRect(0, i * barHeight, barLength, barHeight);
                 const gradientRight = ctx.createLinearGradient(dom.visualizer_canvas.width, 0, dom.visualizer_canvas.width / 2, 0);
                 gradientRight.addColorStop(0, `hsla(${hue}, 100%, 60%, 0.7)`);
                 gradientRight.addColorStop(1, `hsla(${hue}, 100%, 60%, 0)`);
-                ctx.fillStyle = gradientRight;
-                ctx.fillRect(dom.visualizer_canvas.width - barLength, i * barHeight, barLength, barHeight);
+                ctx.fillStyle = gradientRight; ctx.fillRect(dom.visualizer_canvas.width - barLength, i * barHeight, barLength, barHeight);
             }
         }
         function drawFountain(ctx) {
@@ -327,7 +326,7 @@
         }
         function drawNexus(ctx) {
             const w = dom.visualizer_canvas.width; const h = dom.visualizer_canvas.height;
-            if (nexusParticles.length === 0) { for (let i = 0; i < 100; i++) { nexusParticles.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, hue: (hueOffset + i * 3.6) % 360, size: Math.random() * 2 + 1.5 }); } }
+            if (nexusParticles.length === 0) { for (let i = 0; i < 100; i++) { nexusParticles.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, hue: (hueOffset + i * 3.6) % 360, size: Math.random() * 2 + 2 }); } }
             const avgVolume = dataArrayFreq.reduce((a, b) => a + b, 0) / dataArrayFreq.length;
             const connectionThreshold = 50 + (avgVolume / 255) * 70;
             for (let i = 0; i < nexusParticles.length; i++) {
@@ -361,7 +360,7 @@
             const btn = dom.playback_mode_btn;
             switch(playbackMode) {
                 case 'repeat-all': btn.innerHTML = `<i class="fas fa-repeat text-xl"></i>`; btn.title = "全部循環"; break;
-                case 'repeat-one': btn.innerHTML = `<span class="inline-block align-middle text-xl leading-none"><span class="fa-stack"><i class="fas fa-repeat fa-stack-2x"></i><strong class="fa-stack-1x fa-inverse" style="font-family: sans-serif; font-size: 0.6em; margin-top: -0.05em;">1</strong></span></span>`; btn.title = "單曲循環"; break;
+                case 'repeat-one': btn.innerHTML = `<span class="fa-stack" style="font-size: 1.25rem;"><i class="fas fa-repeat fa-stack-2x" style="transform: scale(0.8);"></i><strong class="fa-stack-1x fa-inverse" style="font-family: sans-serif; font-size: 0.5em; margin-top: -0.05em;">1</strong></span>`; btn.title = "單曲循環"; break;
                 case 'shuffle': btn.innerHTML = `<i class="fas fa-shuffle text-xl"></i>`; btn.title = "隨機播放"; break;
             }
         }
