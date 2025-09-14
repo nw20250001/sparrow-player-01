@@ -210,7 +210,9 @@
 
         let playlist = []; let currentTrackIndex = -1; let isPlaying = false;
         let audioContext, analyser, sourceNode, dataArrayFreq, animationFrameId, eqNodes = [];
-        let wakeLock = null; let favoriteIds = new Set(JSON.parse(localStorage.getItem('favoriteIds')) || []);
+        let wakeLock = null; 
+        // 修正：從 localStorage 讀取 favoriteIds，確保是陣列格式
+        let favoriteIds = new Set(JSON.parse(localStorage.getItem('favoriteIds')) || []);
         let hueOffset = 0; let activeTab = 'playlist';
         let activeVisualizer = localStorage.getItem('visualizerStyle') || 'bars';
         
@@ -233,8 +235,29 @@
 
         // --- 功能函式 ---
         const saveFavorites = () => localStorage.setItem('favoriteIds', JSON.stringify(Array.from(favoriteIds)));
-        function toggleFavorite(index) { if (index < 0 || index >= playlist.length) return; const track = playlist[index]; const trackId = track.source; if (favoriteIds.has(trackId)) { favoriteIds.delete(trackId); } else { favoriteIds.add(trackId); } saveFavorites(); renderLists(); updateMainHeartIcon(); }
-        function updateMainHeartIcon() { if (currentTrackIndex > -1) { playlist[currentTrackIndex].isFavorite = favoriteIds.has(playlist[currentTrackIndex].source); const isFav = playlist[currentTrackIndex].isFavorite; dom.favorite_btn.innerHTML = `<i class="${isFav ? 'fas text-pink-500' : 'far'} fa-heart text-xl"></i>`; } else { dom.favorite_btn.innerHTML = `<i class="far fa-heart text-xl"></i>`; } }
+        
+        function toggleFavorite(index) { 
+            if (index < 0 || index >= playlist.length) return; 
+            const track = playlist[index]; 
+            const trackId = track.persistentId; // 修正：使用永久 ID
+            if (favoriteIds.has(trackId)) { 
+                favoriteIds.delete(trackId); 
+            } else { 
+                favoriteIds.add(trackId); 
+            } 
+            saveFavorites(); 
+            renderLists(); 
+            updateMainHeartIcon(); 
+        }
+
+        function updateMainHeartIcon() { 
+            if (currentTrackIndex > -1) { 
+                const isFav = favoriteIds.has(playlist[currentTrackIndex].persistentId); // 修正：使用永久 ID
+                dom.favorite_btn.innerHTML = `<i class="${isFav ? 'fas text-pink-500' : 'far'} fa-heart text-xl"></i>`; 
+            } else { 
+                dom.favorite_btn.innerHTML = `<i class="far fa-heart text-xl"></i>`; 
+            } 
+        }
         const updateWakeLockStatus = (isActive) => { dom.wakelock_status.style.opacity = isActive ? '1' : '0'; };
         const acquireWakeLock = async () => { if ('wakeLock' in navigator) { try { if (document.visibilityState !== 'visible' || wakeLock) return; wakeLock = await navigator.wakeLock.request('screen'); updateWakeLockStatus(true); wakeLock.addEventListener('release', () => { wakeLock = null; updateWakeLockStatus(false); }); } catch (err) {} } };
         const releaseWakeLock = async () => { if (wakeLock !== null) { await wakeLock.release(); wakeLock = null; } };
@@ -245,38 +268,24 @@
         function visualizationLoop() {
             animationFrameId = requestAnimationFrame(visualizationLoop);
             if (!analyser) return;
-
             analyser.getByteFrequencyData(dataArrayFreq);
             const canvasCtx = dom.visualizer_canvas.getContext('2d');
             canvasCtx.clearRect(0, 0, dom.visualizer_canvas.width, dom.visualizer_canvas.height);
-            
-            if (activeVisualizer !== 'pulse_art') {
-                 dom.album_art_circle.style.transform = 'scale(1)';
-            }
-            
+            if (activeVisualizer !== 'pulse_art') { dom.album_art_circle.style.transform = 'scale(1)'; }
             switch(activeVisualizer) {
-                case 'bars':
-                    drawSpectrumBars(canvasCtx);
-                    break;
-                case 'v_bars':
-                    drawVerticalBars(canvasCtx);
-                    break;
-                case 'pulse_art':
-                    handleAlbumArtPulse();
-                    break;
+                case 'bars': drawSpectrumBars(canvasCtx); break;
+                case 'v_bars': drawVerticalBars(canvasCtx); break;
+                case 'pulse_art': handleAlbumArtPulse(); break;
             }
         }
-        
         function drawSpectrumBars(ctx) {
-            ctx.globalAlpha = 0.8;
-            hueOffset += 0.5;
+            ctx.globalAlpha = 0.8; hueOffset += 0.5;
             const containerRect = dom.player_container.getBoundingClientRect();
             const artRect = dom.art_container.getBoundingClientRect();
             const centerX = artRect.left - containerRect.left + artRect.width / 2;
             const centerY = artRect.top - containerRect.top + artRect.height / 2;
             const radius = dom.art_container.clientWidth / 2 + 10;
-            const bars = 80;
-            const barWidth = 3;
+            const bars = 80; const barWidth = 3;
             for (let i = 0; i < bars; i++) {
                 const barHeight = dataArrayFreq[i] * 0.4;
                 const angle = (i / bars) * 2 * Math.PI;
@@ -289,20 +298,13 @@
                 gradient.addColorStop(0, `hsla(${hue}, 100%, 70%, 0)`);
                 gradient.addColorStop(0.5, `hsla(${hue}, 100%, 60%, 1)`);
                 gradient.addColorStop(1, `hsla(${hue}, 100%, 70%, 0)`);
-                ctx.strokeStyle = gradient;
-                ctx.lineWidth = barWidth;
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
+                ctx.strokeStyle = gradient; ctx.lineWidth = barWidth;
+                ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
             }
         }
-        
         function drawVerticalBars(ctx) {
-            ctx.globalAlpha = 0.8;
-            hueOffset += 0.5;
-            const bars = 64;
-            const barWidth = dom.visualizer_canvas.width / bars;
+            ctx.globalAlpha = 0.8; hueOffset += 0.5;
+            const bars = 64; const barWidth = dom.visualizer_canvas.width / bars;
             for (let i = 0; i < bars; i++) {
                 const barHeight = dataArrayFreq[i] * (dom.visualizer_canvas.height / 255) * 0.6;
                 const hue = (hueOffset + i * 5) % 360;
@@ -312,7 +314,6 @@
                 ctx.fillRect(x, y, barWidth, barHeight);
             }
         }
-
         function handleAlbumArtPulse() {
             const bass = (dataArrayFreq[0] + dataArrayFreq[1] + dataArrayFreq[2]) / 3;
             const scale = 1 + (bass / 256) * 0.05;
@@ -339,7 +340,7 @@
         }
 
         function createTrackListItemHTML(track, index) {
-            const isFav = favoriteIds.has(track.source);
+            const isFav = favoriteIds.has(track.persistentId); // 修正：使用永久 ID
             const formatTagHTML = getFormatTagHTML(track);
             return `
                 <li class="p-3 flex items-center justify-between cursor-pointer hover:bg-white/10 ${index === currentTrackIndex ? 'bg-white/10 text-blue-400' : ''}">
@@ -366,8 +367,8 @@
         function renderLists() {
             dom.playlist.innerHTML = playlist.length > 0 ? playlist.map(createTrackListItemHTML).join('') : `<li class="p-4 text-center text-gray-500 text-sm">播放清單是空的</li>`;
             
-            const favoritedTracks = playlist.filter(track => favoriteIds.has(track.source));
-            dom.favorites_list.innerHTML = favoritedTracks.length > 0 ? favoritedTracks.map((track) => { const originalIndex = playlist.findIndex(p => p.source === track.source); return createTrackListItemHTML(track, originalIndex); }).join('') : `<li class="p-4 text-center text-gray-500 text-sm">沒有最愛的歌曲</li>`;
+            const favoritedTracks = playlist.filter(track => favoriteIds.has(track.persistentId));
+            dom.favorites_list.innerHTML = favoritedTracks.length > 0 ? favoritedTracks.map((track) => { const originalIndex = playlist.findIndex(p => p.persistentId === track.persistentId); return createTrackListItemHTML(track, originalIndex); }).join('') : `<li class="p-4 text-center text-gray-500 text-sm">沒有最愛的歌曲</li>`;
         }
         
         function updateFormatTag() {
@@ -421,19 +422,12 @@
             }
         }
 
-
         // --- 事件委派 & 控制 ---
         dom.player_container.addEventListener('click', async (e) => {
             const target = e.target.closest('[data-action], [data-tab]');
             if (!target) return;
-
             const { action, index, preset, tab, style } = target.dataset;
-
-            if (tab) {
-                switchTab(tab);
-                return;
-            }
-
+            if (tab) { switchTab(tab); return; }
             switch (action) {
                 case 'toggle-play': await togglePlayPause(); break;
                 case 'next-track': playNext(); break;
@@ -456,53 +450,24 @@
         });
         dom.player_container.addEventListener('input', (e) => { const target = e.target.closest('[data-action]'); if (!target) return; if (target.dataset.action === 'set-eq') { const { index } = target.dataset; if (eqNodes[index]) eqNodes[index].gain.value = e.target.value; } });
         
-        function exportFavorites() { const favoritedTracks = playlist.filter(track => favoriteIds.has(track.source)); if (favoritedTracks.length === 0) { showTemporaryMessage('沒有最愛歌曲可匯出'); return; } const exportData = favoritedTracks.map(({ id, ...rest }) => rest); const dataStr = JSON.stringify(exportData, null, 2); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const a = document.createElement('a'); a.href = url; a.download = 'sparrow-favorites.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
-        function updatePlaylistEntry(id, newTrackData) { const index = playlist.findIndex(track => track.id === id); if (index !== -1) { playlist[index] = newTrackData; renderLists(); if (playlist.length === 1 && currentTrackIndex === -1) { playTrack(0); } } }
+        function exportFavorites() { const favoritedTracks = playlist.filter(track => favoriteIds.has(track.persistentId)); if (favoritedTracks.length === 0) { showTemporaryMessage('沒有最愛歌曲可匯出'); return; } const exportData = favoritedTracks.map(({ id, source, ...rest }) => rest); const dataStr = JSON.stringify(exportData, null, 2); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const a = document.createElement('a'); a.href = url; a.download = 'sparrow-favorites.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
+        function updatePlaylistEntry(id, newTrackData) { const index = playlist.findIndex(track => track.id === id); if (index !== -1) { playlist[index] = { ...playlist[index], ...newTrackData }; renderLists(); if (playlist.length === 1 && currentTrackIndex === -1) { playTrack(0); } } }
         function setupAudioContext() { if (!audioContext) { try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); sourceNode = audioContext.createMediaElementSource(dom.audio_player); analyser = audioContext.createAnalyser(); analyser.fftSize = 256; setupEQNodes(); analyser.connect(audioContext.destination); dataArrayFreq = new Uint8Array(analyser.frequencyBinCount); } catch (e) {} } }
         function setupCanvas() { const c = dom.player_container; dom.visualizer_canvas.width = c.clientWidth; dom.visualizer_canvas.height = c.clientHeight; }
         function showTemporaryMessage(message, isError = false) { const originalText = dom.track_artist.textContent; dom.track_artist.textContent = message; dom.track_artist.classList.toggle('text-red-400', isError); setTimeout(() => { const track = playlist[currentTrackIndex]; dom.track_artist.textContent = track ? (track.artist || '未知藝人') : '從下方選單新增'; dom.track_artist.classList.remove('text-red-400'); }, 3000); }
         function setProgressRing(percent) { const offset = circumference - (percent / 100) * circumference; dom.progress_ring.style.strokeDashoffset = offset; }
-        function removeTrack(index) { if (index < 0 || index >= playlist.length) return; const track = playlist[index]; favoriteIds.delete(track.source); saveFavorites(); URL.revokeObjectURL(track.source); playlist.splice(index, 1); if (index === currentTrackIndex) { if (playlist.length > 0) { const nextIndex = index >= playlist.length ? 0 : index; playTrack(nextIndex); } else { stopPlayback(); } } else if (index < currentTrackIndex) { currentTrackIndex--; } renderLists(); }
+        function removeTrack(index) { if (index < 0 || index >= playlist.length) return; const track = playlist[index]; favoriteIds.delete(track.persistentId); saveFavorites(); URL.revokeObjectURL(track.source); playlist.splice(index, 1); if (index === currentTrackIndex) { if (playlist.length > 0) { const nextIndex = index >= playlist.length ? 0 : index; playTrack(nextIndex); } else { stopPlayback(); } } else if (index < currentTrackIndex) { currentTrackIndex--; } renderLists(); }
         async function togglePlayPause() { if (currentTrackIndex === -1 && playlist.length > 0) { playTrack(0); return; } if (currentTrackIndex === -1) return; if (audioContext && audioContext.state === 'suspended') await audioContext.resume(); isPlaying = !isPlaying; if (isPlaying) { await dom.audio_player.play(); acquireWakeLock(); } else { dom.audio_player.pause(); releaseWakeLock(); } updatePlayPauseIcon(); }
         
         function playRandom() {
-             if (playlist.length <= 1) {
-                playTrack(0);
-                return;
-            }
+             if (playlist.length <= 1) { playTrack(0); return; }
             let nextIndex;
-            do {
-                nextIndex = Math.floor(Math.random() * playlist.length);
-            } while (nextIndex === currentTrackIndex);
+            do { nextIndex = Math.floor(Math.random() * playlist.length); } while (nextIndex === currentTrackIndex);
             playTrack(nextIndex);
         }
-
-        function playNext() { 
-            if (playbackMode === 'shuffle') {
-                playRandom();
-            } else {
-                let i = currentTrackIndex + 1; 
-                if (i >= playlist.length) i = 0; 
-                playlist.length > 0 ? playTrack(i) : stopPlayback(); 
-            }
-        }
-        function playPrev() { 
-            if (playbackMode === 'shuffle') {
-                playRandom();
-            } else {
-                let i = currentTrackIndex - 1; 
-                if (i < 0) i = playlist.length - 1; 
-                playlist.length > 0 ? playTrack(i) : stopPlayback(); 
-            }
-        }
-
-        function handleSongEnd() {
-            if (playbackMode === 'repeat-one') {
-                playTrack(currentTrackIndex); // Replay current track
-            } else {
-                playNext(); // This will handle shuffle and repeat-all
-            }
-        }
+        function playNext() { if (playbackMode === 'shuffle') { playRandom(); } else { let i = currentTrackIndex + 1; if (i >= playlist.length) i = 0; playlist.length > 0 ? playTrack(i) : stopPlayback(); } }
+        function playPrev() { if (playbackMode === 'shuffle') { playRandom(); } else { let i = currentTrackIndex - 1; if (i < 0) i = playlist.length - 1; playlist.length > 0 ? playTrack(i) : stopPlayback(); } }
+        function handleSongEnd() { if (playbackMode === 'repeat-one') { playTrack(currentTrackIndex); } else { playNext(); } }
 
         function updatePlayPauseIcon() { dom.play_pause_icon.className = isPlaying ? 'fas fa-pause fa-xl' : 'fas fa-play fa-xl ml-1'; }
         function updateAlbumArt(artUrl) { const finalArtUrl = artUrl || DEFAULT_ART; dom.background_art.style.backgroundImage = `url('${finalArtUrl}')`; dom.album_art_circle.style.backgroundImage = `url('${finalArtUrl}')`; }
@@ -513,9 +478,14 @@
         
         function processFiles(files) {
             Array.from(files).filter(file => file.type.startsWith('audio/') || file.name.endsWith('.mqa')).forEach(file => {
+                const persistentId = `${file.name}-${file.size}-${file.lastModified}`; // 建立永久 ID
+                // 避免重複加入
+                if (playlist.some(track => track.persistentId === persistentId)) {
+                    return;
+                }
                 const placeholderId = `placeholder-${Date.now()}-${Math.random()}`;
                 const fileUrl = URL.createObjectURL(file);
-                playlist.push({ id: placeholderId, type: 'loading', name: file.name, source: fileUrl, originalFilename: file.name });
+                playlist.push({ id: placeholderId, type: 'loading', name: file.name, source: fileUrl, originalFilename: file.name, persistentId: persistentId });
                 renderLists();
                 setTimeout(() => {
                     window.jsmediatags.read(file, {
@@ -529,10 +499,10 @@
                                 }
                                 artUrl = `data:${art.format};base64,${window.btoa(base64)}`;
                             }
-                            updatePlaylistEntry(placeholderId, { id: placeholderId, type: 'local', name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', source: fileUrl, albumArtUrl: artUrl, originalFilename: file.name });
+                            updatePlaylistEntry(placeholderId, { name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', albumArtUrl: artUrl });
                         },
                         onError: (error) => {
-                            updatePlaylistEntry(placeholderId, { id: placeholderId, type: 'local', name: file.name, artist: '未知藝人', source: fileUrl, albumArtUrl: null, originalFilename: file.name });
+                            updatePlaylistEntry(placeholderId, { name: file.name, artist: '未知藝人', albumArtUrl: null });
                         }
                     });
                 }, 0);
@@ -550,7 +520,7 @@
         dom.file_input.addEventListener('change', (e) => { processFiles(e.target.files); e.target.value = ''; });
         dom.folder_input.addEventListener('change', (e) => { processFiles(e.target.files); e.target.value = ''; });
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isPlaying) { acquireWakeLock(); } });
-        dom.import_favorites_input.addEventListener('change', (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { try { const importedTracks = JSON.parse(event.target.result); if (!Array.isArray(importedTracks)) { throw new Error('Invalid format'); } let addedCount = 0; importedTracks.forEach(track => { if (track && track.source && track.name && track.type === 'local' && track.originalFilename) { favoriteIds.add(track.source); if (!playlist.some(p => p.source === track.source)) { playlist.push(track); addedCount++; } } }); saveFavorites(); renderLists(); updateMainHeartIcon(); showTemporaryMessage(`成功匯入 ${addedCount} 首新歌曲`); } catch (error) { showTemporaryMessage('匯入失敗，檔案格式錯誤', true); } finally { e.target.value = ''; } }; reader.readAsText(file); });
+        dom.import_favorites_input.addEventListener('change', (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { try { const importedTracks = JSON.parse(event.target.result); if (!Array.isArray(importedTracks)) { throw new Error('Invalid format'); } let addedCount = 0; importedTracks.forEach(track => { if (track && track.persistentId) { favoriteIds.add(track.persistentId); } }); saveFavorites(); renderLists(); updateMainHeartIcon(); showTemporaryMessage(`成功同步最愛清單`); } catch (error) { showTemporaryMessage('匯入失敗，檔案格式錯誤', true); } finally { e.target.value = ''; } }; reader.readAsText(file); });
 
         // --- Initialization ---
         setupCanvas(); updateAlbumArt(null); updateMainHeartIcon(); renderLists(); dom.visualizer_canvas.style.display = 'none';
