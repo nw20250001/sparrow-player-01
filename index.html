@@ -492,10 +492,10 @@
                                 for (let i = 0; i < art.data.length; i++) { base64 += String.fromCharCode(art.data[i]); }
                                 artUrl = `data:${art.format};base64,${window.btoa(base64)}`;
                             }
-                            updatePlaylistEntry(placeholderId, { type: 'local', name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', albumArtUrl: artUrl });
+                            updatePlaylistEntry(placeholderId, { name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', albumArtUrl: artUrl });
                         },
                         onError: (error) => {
-                            updatePlaylistEntry(placeholderId, { type: 'local', name: file.name, artist: '未知藝人', albumArtUrl: null });
+                            updatePlaylistEntry(placeholderId, { name: file.name, artist: '未知藝人', albumArtUrl: null });
                         }
                     });
                 }, 0);
