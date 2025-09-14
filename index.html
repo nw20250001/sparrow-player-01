@@ -93,7 +93,7 @@
                         <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4"/>
                         <circle id="progress-ring" class="progress-ring__circle" cx="60" cy="60" r="54" fill="none" stroke="white" stroke-width="5" stroke-linecap="round"/>
                     </svg>
-                    <div id="album-art-circle" class="bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg">
+                    <div id="album-art-circle" class="rounded-full flex items-center justify-center shadow-lg">
                          <button data-action="toggle-play" class="w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white transition-opacity duration-300 opacity-70 hover:opacity-100">
                             <i id="play-pause-icon" class="fas fa-play fa-xl ml-1"></i>
                         </button>
@@ -145,7 +145,7 @@
                         <i class="fas fa-folder-open fa-lg"></i><span class="block text-xs mt-1">選擇資料夾</span>
                     </label>
                     <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
-                    <button data-action="clear-library" class="text-center text-red-500 hover:text-red-400 transition">
+                     <button data-action="clear-library" class="text-center text-red-500 hover:text-red-400 transition">
                         <i class="fas fa-trash-alt fa-lg"></i><span class="block text-xs mt-1">清除音樂庫</span>
                     </button>
                 </div>
@@ -183,8 +183,8 @@
                 </div>
             </div>
         </div>
-        <div id="visualizer-settings-container" class="panel absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col z-30">
-            <div class="flex justify-between items-center p-4 border-b border-white/10">
+        <div id="visualizer-settings-container" class="panel absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col z-30 overflow-y-auto">
+            <div class="flex justify-between items-center p-4 border-b border-white/10 sticky top-0 bg-black/80 backdrop-blur-md">
                 <h2 class="text-lg font-bold text-white">選擇視覺效果</h2>
                 <button data-action="close-visualizer-settings" class="text-2xl text-white">&times;</button>
             </div>
@@ -192,6 +192,9 @@
                  <button data-action="set-visualizer" data-style="bars" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">環狀光譜</button>
                  <button data-action="set-visualizer" data-style="v_bars" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">垂直光譜</button>
                  <button data-action="set-visualizer" data-style="pulse_art" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">封面脈動</button>
+                 <button data-action="set-visualizer" data-style="side_bars" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">兩側光牆</button>
+                 <button data-action="set-visualizer" data-style="fountain" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">粒子噴泉</button>
+                 <button data-action="set-visualizer" data-style="ripples" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">中心漣漪</button>
             </div>
         </div>
     </div>
@@ -211,75 +214,25 @@
         dom.progress_ring.style.strokeDasharray = `${circumference} ${circumference}`;
         dom.progress_ring.style.strokeDashoffset = circumference;
 
-        let db;
-        let playlist = []; let currentTrackIndex = -1; let isPlaying = false;
+        let db; let playlist = []; let currentTrackIndex = -1; let isPlaying = false;
         let audioContext, analyser, sourceNode, dataArrayFreq, animationFrameId, eqNodes = [];
-        let wakeLock = null; 
-        let favoriteIds = new Set(JSON.parse(localStorage.getItem('favoriteIds')) || []);
+        let wakeLock = null; let favoriteIds = new Set(JSON.parse(localStorage.getItem('favoriteIds')) || []);
         let hueOffset = 0; let activeTab = 'playlist';
         let activeVisualizer = localStorage.getItem('visualizerStyle') || 'bars';
-        
         const playbackModes = ['repeat-all', 'repeat-one', 'shuffle'];
         let currentModeIndex = parseInt(localStorage.getItem('playbackModeIndex')) || 0;
         let playbackMode = playbackModes[currentModeIndex];
-
         const eqFrequencies = [60, 400, 1000, 3000, 10000];
         const eqPresets = {'重設': [0, 0, 0, 0, 0], '重低音': [7, 5, -2, -1, 0], '人聲': [-2, 0, 5, 4, -1], '古典': [4, 3, -1, 2, 5]};
-        const formatColors = {
-            'MP3': 'bg-blue-800', 'FLAC': 'bg-purple-800', 'WAV': 'bg-green-800', 'M4A': 'bg-orange-800',
-            'AAC': 'bg-orange-800', 'OGG': 'bg-yellow-800', 'OPUS': 'bg-yellow-800', 'AUDIO': 'bg-gray-600',
-        };
+        const formatColors = { 'MP3': 'bg-blue-800', 'FLAC': 'bg-purple-800', 'WAV': 'bg-green-800', 'M4A': 'bg-orange-800', 'AAC': 'bg-orange-800', 'OGG': 'bg-yellow-800', 'OPUS': 'bg-yellow-800', 'AUDIO': 'bg-gray-600', };
+        let particles = []; let ripples = [];
 
         // --- IndexedDB ---
-        function initDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('SparrowMusicDB', 1);
-                request.onupgradeneeded = event => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains('tracks')) {
-                        db.createObjectStore('tracks', { keyPath: 'persistentId' });
-                    }
-                };
-                request.onsuccess = event => {
-                    db = event.target.result;
-                    resolve(db);
-                };
-                request.onerror = event => reject(event.target.error);
-            });
-        }
-
-        async function saveTrackToDB(track) {
-            if (!db) return;
-            const transaction = db.transaction(['tracks'], 'readwrite');
-            const store = transaction.objectStore('tracks');
-            store.put(track);
-        }
-        
-        async function loadTracksFromDB() {
-            if (!db) return;
-            const transaction = db.transaction(['tracks'], 'readonly');
-            const store = transaction.objectStore('tracks');
-            const allTracksReq = store.getAll();
-            allTracksReq.onsuccess = () => {
-                const tracks = allTracksReq.result.map(track => ({...track, source: URL.createObjectURL(track.file)}));
-                playlist.push(...tracks);
-                renderLists();
-            };
-        }
-        
-        async function removeTrackFromDB(persistentId) {
-            if (!db) return;
-            const transaction = db.transaction(['tracks'], 'readwrite');
-            const store = transaction.objectStore('tracks');
-            store.delete(persistentId);
-        }
-        
-       async function clearDB() {
-            if (!db) return;
-            const transaction = db.transaction(['tracks'], 'readwrite');
-            const store = transaction.objectStore('tracks');
-            store.clear();
-        }
+        function initDB() { return new Promise((resolve, reject) => { const request = indexedDB.open('SparrowMusicDB', 1); request.onupgradeneeded = event => { const db = event.target.result; if (!db.objectStoreNames.contains('tracks')) { db.createObjectStore('tracks', { keyPath: 'persistentId' }); } }; request.onsuccess = event => { db = event.target.result; resolve(db); }; request.onerror = event => reject(event.target.error); }); }
+        async function saveTrackToDB(track) { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.put(track); }
+        async function loadTracksFromDB() { if (!db) return; const transaction = db.transaction(['tracks'], 'readonly'); const store = transaction.objectStore('tracks'); const allTracksReq = store.getAll(); allTracksReq.onsuccess = () => { const tracks = allTracksReq.result.map(track => ({...track, source: URL.createObjectURL(track.file)})); playlist.push(...tracks); renderLists(); }; }
+        async function removeTrackFromDB(persistentId) { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.delete(persistentId); }
+        async function clearDB() { if (!db) return; const transaction = db.transaction(['tracks'], 'readwrite'); const store = transaction.objectStore('tracks'); store.clear(); }
 
         // --- 功能函式 ---
         const saveFavorites = () => localStorage.setItem('favoriteIds', JSON.stringify(Array.from(favoriteIds)));
@@ -303,6 +256,9 @@
                 case 'bars': drawSpectrumBars(canvasCtx); break;
                 case 'v_bars': drawVerticalBars(canvasCtx); break;
                 case 'pulse_art': handleAlbumArtPulse(); break;
+                case 'side_bars': drawSideBars(canvasCtx); break;
+                case 'fountain': drawFountain(canvasCtx); break;
+                case 'ripples': drawRipples(canvasCtx); break;
             }
         }
         function drawSpectrumBars(ctx) {
@@ -328,55 +284,68 @@
                 const x = i * barWidth; const y = dom.visualizer_canvas.height - barHeight; ctx.fillRect(x, y, barWidth, barHeight);
             }
         }
-        function handleAlbumArtPulse() {
-            const bass = (dataArrayFreq[0] + dataArrayFreq[1] + dataArrayFreq[2]) / 3;
-            const scale = 1 + (bass / 256) * 0.05;
-            dom.album_art_circle.style.transform = `scale(${scale})`;
+        function handleAlbumArtPulse() { const bass = (dataArrayFreq[0] + dataArrayFreq[1] + dataArrayFreq[2]) / 3; const scale = 1 + (bass / 256) * 0.1; dom.album_art_circle.style.transform = `scale(${scale})`; }
+        function drawSideBars(ctx) {
+            hueOffset += 0.5; const bars = 64; const barWidth = dom.visualizer_canvas.height / bars;
+            for (let i = 0; i < bars; i++) {
+                const barLength = dataArrayFreq[i] * (dom.visualizer_canvas.width / 255) * 0.3;
+                const hue = (hueOffset + i * 5) % 360; ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+                const y = i * barWidth; ctx.fillRect(0, y, barLength, barWidth); ctx.fillRect(dom.visualizer_canvas.width - barLength, y, barLength, barWidth);
+            }
         }
-
+        function drawFountain(ctx) {
+            const bass = (dataArrayFreq[2] + dataArrayFreq[3] + dataArrayFreq[4]) / 3;
+            if (bass > 200) { for (let i = 0; i < 3; i++) { particles.push({ x: dom.visualizer_canvas.width / 2, y: dom.visualizer_canvas.height, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 5 - (bass / 255 * 5), alpha: 1, hue: (hueOffset + Math.random() * 60) % 360, size: Math.random() * 2 + 1, }); } }
+            ctx.globalAlpha = 1;
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.alpha -= 0.02;
+                if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+                ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.alpha})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+        function drawRipples(ctx) {
+            const bass = (dataArrayFreq[1] + dataArrayFreq[2]) / 3;
+            if (bass > 210 && ripples.length < 5) {
+                const containerRect = dom.player_container.getBoundingClientRect(); const artRect = dom.art_container.getBoundingClientRect();
+                ripples.push({ x: artRect.left - containerRect.left + artRect.width / 2, y: artRect.top - containerRect.top + artRect.height / 2, radius: dom.art_container.clientWidth / 2, alpha: 1, hue: (hueOffset + Math.random() * 60) % 360, width: 4 });
+            }
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const r = ripples[i]; r.radius += 1.5; r.alpha -= 0.02; r.width = Math.max(0, r.width - 0.05);
+                if (r.alpha <= 0) { ripples.splice(i, 1); continue; }
+                ctx.strokeStyle = `hsla(${r.hue}, 100%, 70%, ${r.alpha})`; ctx.lineWidth = r.width;
+                ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.stroke();
+            }
+        }
+       
         // --- 核心播放邏輯 ---
         async function playTrack(index) { if (index < 0 || index >= playlist.length) return; const track = playlist[index]; if (track.type === 'loading') return; if (audioContext && audioContext.state === 'suspended') await audioContext.resume(); acquireWakeLock(); currentTrackIndex = index; dom.track_title.textContent = track.name; dom.track_artist.textContent = track.artist || '未知類型'; updateAlbumArt(track.albumArtUrl); updateMainHeartIcon(); updateFormatTag(); dom.visualizer_canvas.style.display = 'block'; document.querySelector('[data-action="open-eq"]').disabled = false; document.querySelector('[data-action="open-eq"]').classList.remove('opacity-50'); if(animationFrameId) cancelAnimationFrame(animationFrameId); visualizationLoop(); dom.audio_player.src = track.source; try { await dom.audio_player.play(); } catch (err) {} }
         async function stopPlayback() { dom.audio_player.pause(); isPlaying = false; currentTrackIndex = -1; releaseWakeLock(); if(animationFrameId) cancelAnimationFrame(animationFrameId); const canvasCtx = dom.visualizer_canvas.getContext('2d'); canvasCtx.clearRect(0, 0, dom.visualizer_canvas.width, dom.visualizer_canvas.height); dom.visualizer_canvas.style.display = 'none'; updatePlayPauseIcon(); updateAlbumArt(null); updateMainHeartIcon(); updateFormatTag(); dom.track_title.textContent = "未選擇歌曲"; dom.track_artist.textContent = "從下方選單新增"; resetProgress(); renderLists(); }
 
         // --- UI 更新函式 ---
-        function getFormatTagHTML(track) {
-            let format = '...'; const filename = track.originalFilename;
-            if (track.type === 'loading') { format = '讀取中'; return `<span class="format-tag bg-gray-600">${format}</span>`; }
-            else if (filename) { const ext = filename.split('.').pop().toUpperCase(); format = ['MP3', 'WAV', 'FLAC', 'M4A', 'AAC', 'OGG', 'OPUS'].includes(ext) ? ext : 'AUDIO'; }
-            const colorClass = formatColors[format] || 'bg-gray-600'; return `<span class="format-tag ${colorClass}">${format}</span>`;
-        }
-        function createTrackListItemHTML(track, index) {
-            const isFav = favoriteIds.has(track.persistentId); const formatTagHTML = getFormatTagHTML(track);
-            return `<li class="p-3 flex items-center justify-between cursor-pointer hover:bg-white/10 ${index === currentTrackIndex ? 'bg-white/10 text-blue-400' : ''}"><div data-action="play-track" data-index="${index}" class="flex items-center gap-3 truncate flex-grow"><img src="${track.albumArtUrl || DEFAULT_ART}" class="w-12 h-12 rounded-md bg-white/10 object-cover"><div class="truncate"><span class="truncate block text-white">${track.name || '讀取中...'}</span><div class="flex items-center">${formatTagHTML}</div></div></div><div class="flex items-center ml-2"><button data-action="toggle-favorite" data-index="${index}" class="p-2 text-xl ${isFav ? 'text-pink-500' : 'text-gray-500'} hover:text-pink-400"><i class="${isFav ? 'fas' : 'far'} fa-heart"></i></button><button data-action="remove-track" data-index="${index}" class="p-2 text-xl text-gray-500 hover:text-white transition-colors"><i class="fas fa-trash"></i></button></div></li>`;
-        }
+        function getFormatTagHTML(track) { let format = '...'; const filename = track.originalFilename; if (track.type === 'loading') { format = '讀取中'; return `<span class="format-tag bg-gray-600">${format}</span>`; } else if (filename) { const ext = filename.split('.').pop().toUpperCase(); format = ['MP3', 'WAV', 'FLAC', 'M4A', 'AAC', 'OGG', 'OPUS'].includes(ext) ? ext : 'AUDIO'; } const colorClass = formatColors[format] || 'bg-gray-600'; return `<span class="format-tag ${colorClass}">${format}</span>`; }
+        function createTrackListItemHTML(track, index) { const isFav = favoriteIds.has(track.persistentId); const formatTagHTML = getFormatTagHTML(track); return `<li class="p-3 flex items-center justify-between cursor-pointer hover:bg-white/10 ${index === currentTrackIndex ? 'bg-white/10 text-blue-400' : ''}"><div data-action="play-track" data-index="${index}" class="flex items-center gap-3 truncate flex-grow"><img src="${track.albumArtUrl || DEFAULT_ART}" class="w-12 h-12 rounded-md bg-white/10 object-cover"><div class="truncate"><span class="truncate block text-white">${track.name || '讀取中...'}</span><div class="flex items-center">${formatTagHTML}</div></div></div><div class="flex items-center ml-2"><button data-action="toggle-favorite" data-index="${index}" class="p-2 text-xl ${isFav ? 'text-pink-500' : 'text-gray-500'} hover:text-pink-400"><i class="${isFav ? 'fas' : 'far'} fa-heart"></i></button><button data-action="remove-track" data-index="${index}" class="p-2 text-xl text-gray-500 hover:text-white transition-colors"><i class="fas fa-trash"></i></button></div></li>`; }
         function renderLists() {
             dom.playlist.innerHTML = playlist.length > 0 ? playlist.map(createTrackListItemHTML).join('') : `<li class="p-4 text-center text-gray-500 text-sm">播放清單是空的</li>`;
             const favoritedTracks = playlist.filter(track => favoriteIds.has(track.persistentId));
             dom.favorites_list.innerHTML = favoritedTracks.length > 0 ? favoritedTracks.map((track) => { const originalIndex = playlist.findIndex(p => p.persistentId === track.persistentId); return createTrackListItemHTML(track, originalIndex); }).join('') : `<li class="p-4 text-center text-gray-500 text-sm">沒有最愛的歌曲</li>`;
         }
         function updateFormatTag() { if (currentTrackIndex > -1) { const track = playlist[currentTrackIndex]; dom.format_tag_main.innerHTML = getFormatTagHTML(track); } else { dom.format_tag_main.innerHTML = ''; } }
-        function switchTab(tab) {
-            activeTab = tab; document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active-tab', btn.dataset.tab === tab));
-            dom.playlist.classList.toggle('hidden', tab !== 'playlist'); dom.favorites_list.classList.toggle('hidden', tab !== 'favorites');
-            dom.playlist_actions.classList.toggle('hidden', tab !== 'playlist'); dom.favorites_actions.classList.toggle('hidden', tab !== 'favorites');
-        }
+        function switchTab(tab) { activeTab = tab; document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active-tab', btn.dataset.tab === tab)); dom.playlist.classList.toggle('hidden', tab !== 'playlist'); dom.favorites_list.classList.toggle('hidden', tab !== 'favorites'); dom.playlist_actions.classList.toggle('hidden', tab !== 'playlist'); dom.favorites_actions.classList.toggle('hidden', tab !== 'favorites'); }
         function updateVisualizerChoiceUI() { document.querySelectorAll('.visualizer-choice-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.style === activeVisualizer)); }
         function cyclePlaybackMode() { currentModeIndex = (currentModeIndex + 1) % playbackModes.length; playbackMode = playbackModes[currentModeIndex]; localStorage.setItem('playbackModeIndex', currentModeIndex); updatePlaybackModeIcon(); }
         function updatePlaybackModeIcon() {
             const btn = dom.playback_mode_btn;
             switch(playbackMode) {
                 case 'repeat-all': btn.innerHTML = `<i class="fas fa-repeat text-xl"></i>`; btn.title = "全部循環"; break;
-                case 'repeat-one': btn.innerHTML = `<span class="fa-stack" style="font-size: 0.8em;"><i class="fas fa-repeat fa-stack-2x"></i><strong class="fa-stack-1x fa-inverse" style="font-family: sans-serif; padding-top: 4px;">1</strong></span>`; btn.title = "單曲循環"; break;
+                case 'repeat-one': btn.innerHTML = `<span class="inline-block align-middle text-xl leading-none"><span class="fa-stack"><i class="fas fa-repeat fa-stack-2x"></i><strong class="fa-stack-1x fa-inverse" style="font-family: sans-serif; font-size: 0.6em; margin-top: -0.05em;">1</strong></span></span>`; btn.title = "單曲循環"; break;
                 case 'shuffle': btn.innerHTML = `<i class="fas fa-shuffle text-xl"></i>`; btn.title = "隨機播放"; break;
             }
         }
 
         // --- 事件委派 & 控制 ---
         dom.player_container.addEventListener('click', async (e) => {
-            const target = e.target.closest('[data-action], [data-tab]');
-            if (!target) return;
-            const { action, index, preset, tab, style } = target.dataset;
-            if (tab) { switchTab(tab); return; }
+            const target = e.target.closest('[data-action], [data-tab]'); if (!target) return;
+            const { action, index, preset, tab, style } = target.dataset; if (tab) { switchTab(tab); return; }
             switch (action) {
                 case 'toggle-play': await togglePlayPause(); break;
                 case 'next-track': playNext(); break;
@@ -415,7 +384,7 @@
         function handleSongEnd() { if (playbackMode === 'repeat-one') { playTrack(currentTrackIndex); } else { playNext(); } }
 
         function updatePlayPauseIcon() { dom.play_pause_icon.className = isPlaying ? 'fas fa-pause fa-xl' : 'fas fa-play fa-xl ml-1'; }
-        function updateAlbumArt(artUrl) { const finalArtUrl = artUrl || DEFAULT_ART; dom.background_art.style.backgroundImage = `url('${finalArtUrl}')`; dom.album_art_circle.style.backgroundImage = `url('${finalArtUrl}')`; }
+        function updateAlbumArt(artUrl) { const finalArtUrl = artUrl || DEFAULT_ART; dom.background_art.style.backgroundImage = `url('${finalArtUrl}')`; dom.album_art_circle.style.backgroundImage = `url('${finalArtUrl}')`; dom.album_art_circle.style.backgroundImage === 'none' ? dom.album_art_circle.classList.add('bg-white/10', 'backdrop-blur-sm') : dom.album_art_circle.classList.remove('bg-white/10', 'backdrop-blur-sm');}
         function updateProgress() { if (currentTrackIndex === -1) return; const currentTime = dom.audio_player.currentTime; const duration = dom.audio_player.duration; if (duration && !isNaN(duration)) { let p = (currentTime / duration) * 100; dom.progress_bar.value = p; setProgressRing(p); dom.current_time.textContent = formatTime(currentTime); dom.duration.textContent = formatTime(duration); } }
         function resetProgress() { dom.progress_bar.value = 0; setProgressRing(0); dom.current_time.textContent = '0:00'; dom.duration.textContent = '0:00'; }
         dom.progress_bar.addEventListener('input', () => { if (currentTrackIndex === -1) return; const duration = dom.audio_player.duration; if (duration) { dom.audio_player.currentTime = (dom.progress_bar.value / 100) * duration; } });
@@ -426,11 +395,10 @@
                 const persistentId = `${file.name}-${file.size}-${file.lastModified}`;
                 if (playlist.some(track => track.persistentId === persistentId)) { return; }
                 const placeholderId = `placeholder-${Date.now()}-${Math.random()}`;
-                const fileUrl = URL.createObjectURL(file);
                 
-                const trackData = { id: placeholderId, type: 'loading', name: file.name, source: fileUrl, originalFilename: file.name, persistentId: persistentId, file: file };
-                playlist.push(trackData);
-                saveTrackToDB(trackData); // 先存檔
+                const trackData = { id: placeholderId, type: 'loading', name: file.name, originalFilename: file.name, persistentId: persistentId, file: file };
+                playlist.push({...trackData, source: URL.createObjectURL(file)});
+                saveTrackToDB(trackData);
                 renderLists();
                 
                 setTimeout(() => {
