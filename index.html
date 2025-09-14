@@ -194,7 +194,7 @@
                  <button data-action="set-visualizer" data-style="pulse_art" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">封面脈動</button>
                  <button data-action="set-visualizer" data-style="side_bars" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">兩側光牆</button>
                  <button data-action="set-visualizer" data-style="fountain" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">粒子噴泉</button>
-                 <button data-action="set-visualizer" data-style="ripples" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">中心漣漪</button>
+                 <button data-action="set-visualizer" data-style="nexus" class="visualizer-choice-btn w-3/4 bg-white/10 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition">星塵連結</button>
             </div>
         </div>
     </div>
@@ -225,7 +225,7 @@
         const eqFrequencies = [60, 400, 1000, 3000, 10000];
         const eqPresets = {'重設': [0, 0, 0, 0, 0], '重低音': [7, 5, -2, -1, 0], '人聲': [-2, 0, 5, 4, -1], '古典': [4, 3, -1, 2, 5]};
         const formatColors = { 'MP3': 'bg-blue-800', 'FLAC': 'bg-purple-800', 'WAV': 'bg-green-800', 'M4A': 'bg-orange-800', 'AAC': 'bg-orange-800', 'OGG': 'bg-yellow-800', 'OPUS': 'bg-yellow-800', 'AUDIO': 'bg-gray-600', };
-        let particles = []; let ripples = [];
+        let particles = []; let nexusParticles = [];
 
         // --- IndexedDB ---
         function initDB() { return new Promise((resolve, reject) => { const request = indexedDB.open('SparrowMusicDB', 1); request.onupgradeneeded = event => { const db = event.target.result; if (!db.objectStoreNames.contains('tracks')) { db.createObjectStore('tracks', { keyPath: 'persistentId' }); } }; request.onsuccess = event => { db = event.target.result; resolve(db); }; request.onerror = event => reject(event.target.error); }); }
@@ -258,7 +258,7 @@
                 case 'pulse_art': handleAlbumArtPulse(); break;
                 case 'side_bars': drawSideBars(canvasCtx); break;
                 case 'fountain': drawFountain(canvasCtx); break;
-                case 'ripples': drawRipples(canvasCtx); break;
+                case 'nexus': drawNexus(canvasCtx); break;
             }
         }
         function drawSpectrumBars(ctx) {
@@ -284,36 +284,39 @@
                 const x = i * barWidth; const y = dom.visualizer_canvas.height - barHeight; ctx.fillRect(x, y, barWidth, barHeight);
             }
         }
-        function handleAlbumArtPulse() { const bass = (dataArrayFreq[0] + dataArrayFreq[1] + dataArrayFreq[2]) / 3; const scale = 1 + (bass / 256) * 0.1; dom.album_art_circle.style.transform = `scale(${scale})`; }
+        function handleAlbumArtPulse() { const bass = (dataArrayFreq[0] + dataArrayFreq[1] + dataArrayFreq[2]) / 3; const scale = 1 + (bass / 256) * 0.2; dom.album_art_circle.style.transform = `scale(${scale})`; }
         function drawSideBars(ctx) {
-            hueOffset += 0.5; const bars = 64; const barWidth = dom.visualizer_canvas.height / bars;
+            hueOffset += 0.5; const bars = 64; const barHeight = dom.visualizer_canvas.height / bars;
             for (let i = 0; i < bars; i++) {
                 const barLength = dataArrayFreq[i] * (dom.visualizer_canvas.width / 255) * 0.3;
                 const hue = (hueOffset + i * 5) % 360; ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
-                const y = i * barWidth; ctx.fillRect(0, y, barLength, barWidth); ctx.fillRect(dom.visualizer_canvas.width - barLength, y, barLength, barWidth);
+                const y = i * barHeight; ctx.fillRect(0, y, barLength, barHeight); ctx.fillRect(dom.visualizer_canvas.width - barLength, y, barLength, barHeight);
             }
         }
         function drawFountain(ctx) {
             const bass = (dataArrayFreq[2] + dataArrayFreq[3] + dataArrayFreq[4]) / 3;
-            if (bass > 200) { for (let i = 0; i < 3; i++) { particles.push({ x: dom.visualizer_canvas.width / 2, y: dom.visualizer_canvas.height, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 5 - (bass / 255 * 5), alpha: 1, hue: (hueOffset + Math.random() * 60) % 360, size: Math.random() * 2 + 1, }); } }
+            if (bass > 180) { for (let i = 0; i < 3; i++) { particles.push({ x: Math.random() * dom.visualizer_canvas.width, y: dom.visualizer_canvas.height, vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 6 - (bass / 255 * 6), alpha: 1, hue: (hueOffset + Math.random() * 60) % 360, size: Math.random() * 2 + 1, }); } }
             ctx.globalAlpha = 1;
             for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.alpha -= 0.02;
+                const p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.08; p.alpha -= 0.015;
                 if (p.alpha <= 0) { particles.splice(i, 1); continue; }
                 ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.alpha})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
             }
         }
-        function drawRipples(ctx) {
-            const bass = (dataArrayFreq[1] + dataArrayFreq[2]) / 3;
-            if (bass > 210 && ripples.length < 5) {
-                const containerRect = dom.player_container.getBoundingClientRect(); const artRect = dom.art_container.getBoundingClientRect();
-                ripples.push({ x: artRect.left - containerRect.left + artRect.width / 2, y: artRect.top - containerRect.top + artRect.height / 2, radius: dom.art_container.clientWidth / 2, alpha: 1, hue: (hueOffset + Math.random() * 60) % 360, width: 4 });
-            }
-            for (let i = ripples.length - 1; i >= 0; i--) {
-                const r = ripples[i]; r.radius += 1.5; r.alpha -= 0.02; r.width = Math.max(0, r.width - 0.05);
-                if (r.alpha <= 0) { ripples.splice(i, 1); continue; }
-                ctx.strokeStyle = `hsla(${r.hue}, 100%, 70%, ${r.alpha})`; ctx.lineWidth = r.width;
-                ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.stroke();
+        function drawNexus(ctx) {
+            const w = dom.visualizer_canvas.width; const h = dom.visualizer_canvas.height;
+            if (nexusParticles.length === 0) { for (let i = 0; i < 80; i++) { nexusParticles.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 1, vy: (Math.random() - 0.5) * 1, hue: (hueOffset + i * 5) % 360 }); } }
+            const avgVolume = dataArrayFreq.reduce((a, b) => a + b, 0) / dataArrayFreq.length;
+            const connectionThreshold = 60 + (avgVolume / 255) * 60;
+            for (let i = 0; i < nexusParticles.length; i++) {
+                const p1 = nexusParticles[i];
+                p1.x += p1.vx; p1.y += p1.vy;
+                if (p1.x > w) p1.x = 0; if (p1.x < 0) p1.x = w; if (p1.y > h) p1.y = 0; if (p1.y < 0) p1.y = h;
+                ctx.fillStyle = `hsl(${p1.hue}, 100%, 70%)`; ctx.beginPath(); ctx.arc(p1.x, p1.y, 1.5, 0, Math.PI * 2); ctx.fill();
+                for (let j = i + 1; j < nexusParticles.length; j++) {
+                    const p2 = nexusParticles[j]; const dx = p1.x - p2.x; const dy = p1.y - p2.y; const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < connectionThreshold) { const opacity = 1 - (dist / connectionThreshold); ctx.strokeStyle = `hsla(${p1.hue}, 100%, 70%, ${opacity * 0.5})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
+                }
             }
         }
        
@@ -358,7 +361,7 @@
                 case 'close-eq': dom.eq_container.classList.remove('show'); break;
                 case 'open-visualizer-settings': dom.visualizer_settings_container.classList.add('show'); updateVisualizerChoiceUI(); break;
                 case 'close-visualizer-settings': dom.visualizer_settings_container.classList.remove('show'); break;
-                case 'set-visualizer': activeVisualizer = style; localStorage.setItem('visualizerStyle', style); updateVisualizerChoiceUI(); dom.visualizer_settings_container.classList.remove('show'); break;
+                case 'set-visualizer': activeVisualizer = style; localStorage.setItem('visualizerStyle', style); updateVisualizerChoiceUI(); if (activeVisualizer !== 'fountain') particles = []; if (activeVisualizer !== 'nexus') nexusParticles = []; dom.visualizer_settings_container.classList.remove('show'); break;
                 case 'export-favorites': exportFavorites(); break;
                 case 'play-track': playTrack(parseInt(index)); dom.playlist_container.classList.remove('show'); break;
                 case 'toggle-favorite': toggleFavorite(parseInt(index)); break;
@@ -395,12 +398,10 @@
                 const persistentId = `${file.name}-${file.size}-${file.lastModified}`;
                 if (playlist.some(track => track.persistentId === persistentId)) { return; }
                 const placeholderId = `placeholder-${Date.now()}-${Math.random()}`;
-                
                 const trackData = { id: placeholderId, type: 'loading', name: file.name, originalFilename: file.name, persistentId: persistentId, file: file };
                 playlist.push({...trackData, source: URL.createObjectURL(file)});
                 saveTrackToDB(trackData);
                 renderLists();
-                
                 setTimeout(() => {
                     window.jsmediatags.read(file, {
                         onSuccess: (tag) => {
@@ -436,7 +437,6 @@
             updateMainHeartIcon();
             updatePlaybackModeIcon();
             dom.visualizer_canvas.style.display = 'none';
-            const canvasCtx = dom.visualizer_canvas.getContext('2d');
             await initDB();
             await loadTracksFromDB();
         }
