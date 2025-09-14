@@ -211,7 +211,6 @@
         let playlist = []; let currentTrackIndex = -1; let isPlaying = false;
         let audioContext, analyser, sourceNode, dataArrayFreq, animationFrameId, eqNodes = [];
         let wakeLock = null; 
-        // 修正：從 localStorage 讀取 favoriteIds，確保是陣列格式
         let favoriteIds = new Set(JSON.parse(localStorage.getItem('favoriteIds')) || []);
         let hueOffset = 0; let activeTab = 'playlist';
         let activeVisualizer = localStorage.getItem('visualizerStyle') || 'bars';
@@ -239,7 +238,7 @@
         function toggleFavorite(index) { 
             if (index < 0 || index >= playlist.length) return; 
             const track = playlist[index]; 
-            const trackId = track.persistentId; // 修正：使用永久 ID
+            const trackId = track.persistentId;
             if (favoriteIds.has(trackId)) { 
                 favoriteIds.delete(trackId); 
             } else { 
@@ -252,7 +251,7 @@
 
         function updateMainHeartIcon() { 
             if (currentTrackIndex > -1) { 
-                const isFav = favoriteIds.has(playlist[currentTrackIndex].persistentId); // 修正：使用永久 ID
+                const isFav = favoriteIds.has(playlist[currentTrackIndex].persistentId);
                 dom.favorite_btn.innerHTML = `<i class="${isFav ? 'fas text-pink-500' : 'far'} fa-heart text-xl"></i>`; 
             } else { 
                 dom.favorite_btn.innerHTML = `<i class="far fa-heart text-xl"></i>`; 
@@ -340,7 +339,7 @@
         }
 
         function createTrackListItemHTML(track, index) {
-            const isFav = favoriteIds.has(track.persistentId); // 修正：使用永久 ID
+            const isFav = favoriteIds.has(track.persistentId);
             const formatTagHTML = getFormatTagHTML(track);
             return `
                 <li class="p-3 flex items-center justify-between cursor-pointer hover:bg-white/10 ${index === currentTrackIndex ? 'bg-white/10 text-blue-400' : ''}">
@@ -366,7 +365,6 @@
 
         function renderLists() {
             dom.playlist.innerHTML = playlist.length > 0 ? playlist.map(createTrackListItemHTML).join('') : `<li class="p-4 text-center text-gray-500 text-sm">播放清單是空的</li>`;
-            
             const favoritedTracks = playlist.filter(track => favoriteIds.has(track.persistentId));
             dom.favorites_list.innerHTML = favoritedTracks.length > 0 ? favoritedTracks.map((track) => { const originalIndex = playlist.findIndex(p => p.persistentId === track.persistentId); return createTrackListItemHTML(track, originalIndex); }).join('') : `<li class="p-4 text-center text-gray-500 text-sm">沒有最愛的歌曲</li>`;
         }
@@ -451,7 +449,7 @@
         dom.player_container.addEventListener('input', (e) => { const target = e.target.closest('[data-action]'); if (!target) return; if (target.dataset.action === 'set-eq') { const { index } = target.dataset; if (eqNodes[index]) eqNodes[index].gain.value = e.target.value; } });
         
         function exportFavorites() { const favoritedTracks = playlist.filter(track => favoriteIds.has(track.persistentId)); if (favoritedTracks.length === 0) { showTemporaryMessage('沒有最愛歌曲可匯出'); return; } const exportData = favoritedTracks.map(({ id, source, ...rest }) => rest); const dataStr = JSON.stringify(exportData, null, 2); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const a = document.createElement('a'); a.href = url; a.download = 'sparrow-favorites.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
-        function updatePlaylistEntry(id, newTrackData) { const index = playlist.findIndex(track => track.id === id); if (index !== -1) { playlist[index] = { ...playlist[index], ...newTrackData }; renderLists(); if (playlist.length === 1 && currentTrackIndex === -1) { playTrack(0); } } }
+        function updatePlaylistEntry(id, newTrackData) { const index = playlist.findIndex(track => track.id === id); if (index !== -1) { playlist[index] = { ...playlist[index], ...newTrackData, type: 'local' }; renderLists(); if (playlist.length === 1 && currentTrackIndex === -1) { playTrack(0); } } }
         function setupAudioContext() { if (!audioContext) { try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); sourceNode = audioContext.createMediaElementSource(dom.audio_player); analyser = audioContext.createAnalyser(); analyser.fftSize = 256; setupEQNodes(); analyser.connect(audioContext.destination); dataArrayFreq = new Uint8Array(analyser.frequencyBinCount); } catch (e) {} } }
         function setupCanvas() { const c = dom.player_container; dom.visualizer_canvas.width = c.clientWidth; dom.visualizer_canvas.height = c.clientHeight; }
         function showTemporaryMessage(message, isError = false) { const originalText = dom.track_artist.textContent; dom.track_artist.textContent = message; dom.track_artist.classList.toggle('text-red-400', isError); setTimeout(() => { const track = playlist[currentTrackIndex]; dom.track_artist.textContent = track ? (track.artist || '未知藝人') : '從下方選單新增'; dom.track_artist.classList.remove('text-red-400'); }, 3000); }
@@ -478,11 +476,8 @@
         
         function processFiles(files) {
             Array.from(files).filter(file => file.type.startsWith('audio/') || file.name.endsWith('.mqa')).forEach(file => {
-                const persistentId = `${file.name}-${file.size}-${file.lastModified}`; // 建立永久 ID
-                // 避免重複加入
-                if (playlist.some(track => track.persistentId === persistentId)) {
-                    return;
-                }
+                const persistentId = `${file.name}-${file.size}-${file.lastModified}`;
+                if (playlist.some(track => track.persistentId === persistentId)) { return; }
                 const placeholderId = `placeholder-${Date.now()}-${Math.random()}`;
                 const fileUrl = URL.createObjectURL(file);
                 playlist.push({ id: placeholderId, type: 'loading', name: file.name, source: fileUrl, originalFilename: file.name, persistentId: persistentId });
@@ -494,15 +489,13 @@
                             let artUrl = null;
                             if (art) {
                                 let base64 = "";
-                                for (let i = 0; i < art.data.length; i++) {
-                                    base64 += String.fromCharCode(art.data[i]);
-                                }
+                                for (let i = 0; i < art.data.length; i++) { base64 += String.fromCharCode(art.data[i]); }
                                 artUrl = `data:${art.format};base64,${window.btoa(base64)}`;
                             }
-                            updatePlaylistEntry(placeholderId, { name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', albumArtUrl: artUrl });
+                            updatePlaylistEntry(placeholderId, { type: 'local', name: tag.tags.title || file.name, artist: tag.tags.artist || '未知藝人', albumArtUrl: artUrl });
                         },
                         onError: (error) => {
-                            updatePlaylistEntry(placeholderId, { name: file.name, artist: '未知藝人', albumArtUrl: null });
+                            updatePlaylistEntry(placeholderId, { type: 'local', name: file.name, artist: '未知藝人', albumArtUrl: null });
                         }
                     });
                 }, 0);
@@ -520,7 +513,7 @@
         dom.file_input.addEventListener('change', (e) => { processFiles(e.target.files); e.target.value = ''; });
         dom.folder_input.addEventListener('change', (e) => { processFiles(e.target.files); e.target.value = ''; });
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isPlaying) { acquireWakeLock(); } });
-        dom.import_favorites_input.addEventListener('change', (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { try { const importedTracks = JSON.parse(event.target.result); if (!Array.isArray(importedTracks)) { throw new Error('Invalid format'); } let addedCount = 0; importedTracks.forEach(track => { if (track && track.persistentId) { favoriteIds.add(track.persistentId); } }); saveFavorites(); renderLists(); updateMainHeartIcon(); showTemporaryMessage(`成功同步最愛清單`); } catch (error) { showTemporaryMessage('匯入失敗，檔案格式錯誤', true); } finally { e.target.value = ''; } }; reader.readAsText(file); });
+        dom.import_favorites_input.addEventListener('change', (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { try { const importedFavorites = JSON.parse(event.target.result); if (!Array.isArray(importedFavorites)) { throw new Error('Invalid format'); } importedFavorites.forEach(fav => { if (fav.persistentId) { favoriteIds.add(fav.persistentId); } }); saveFavorites(); renderLists(); updateMainHeartIcon(); showTemporaryMessage(`成功同步最愛清單`); } catch (error) { showTemporaryMessage('匯入失敗，檔案格式錯誤', true); } finally { e.target.value = ''; } }; reader.readAsText(file); });
 
         // --- Initialization ---
         setupCanvas(); updateAlbumArt(null); updateMainHeartIcon(); renderLists(); dom.visualizer_canvas.style.display = 'none';
